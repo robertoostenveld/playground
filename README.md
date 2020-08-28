@@ -1,157 +1,283 @@
-# Unleash the power!
+# Using Heroku to serve a webhook with Python code
 
-<!-- Put the link to this slide here so people can follow -->
-slide: https://hackmd.io/p/template-Talk-slide
+Previously we documented how to link a Google form to the execution of a piece of Bash or Python code on the DCCN HPC cluster. Here we will investigate how to execute Python code on Heroku.
 
----
+Heroku is a platform as a service (PaaS) that enables you to run applications entirely in the cloud. It supports several programming languages. You use the `git` and `heroku` command-line utilities to upload and manage your code.
 
-We have a collaborative session
+Heroku has the concept of "dynos": these are very simple virtual machines (i.e. Docker containers) designed to interact with users and/or other servers. Heroku takes care of binding your application to an external http/https interface, it does the caching of incoming requests, and it will automatically start your dyno when a http request comes in. When it is not active for some time (by default 30 minutes) Heroku will switch the dyno off. You can change this configuration, and also scale up the number of dynos if you expect a lot of trafic.
 
-please prepare laptop or smartphone to join!
+If your web application is not used very intensely, and hence your dyno is off most of the time, the [Free and Hobby plan](https://www.heroku.com/pricing) will be good enough.
 
----
+## Create conda environment
 
-## Who am I?
+Although not required, I recommend that you create a separate conda environment for each of the following examples. It ensures that your test environment is more similar to your deployment environment, and facilitates figuring out what the specific requirements are.
 
-- Front-end developer
-- VSCode :heart: 
-- I use tabs. :cat: 
-
----
-
-### 70% of our users are developers. Developers :heart: GitHub.
-
----
-
-{%youtube E8Nj7RwXf0s %}
-
----
-
-### Usage flow
-
----
-
-
-```graphviz
-digraph {
-  compound=true
-  rankdir=RL
-
-  graph [ fontname="Source Sans Pro", fontsize=20 ];
-  node [ fontname="Source Sans Pro", fontsize=18];
-  edge [ fontname="Source Sans Pro", fontsize=12 ];
-
-
-  subgraph core {
-    c [label="Hackmd-it \ncore"] [shape=box]
-  }
-  
-  c -> sync [ltail=session lhead=session]
-
-  subgraph cluster1 {
-     concentrate=true
-    a [label="Text source\nGithub, Gitlab, ..."] [shape=box]
-    b [label="HackMD Editor"] [shape=box]
-    sync [label="sync" shape=plaintext ]
-    b -> sync  [dir="both"]
-    sync -> a [dir="both"]
-    label="An edit session"
-  }
-}
+```bash
+conda deactivate
+conda create -n hello_simple python=3.7
+conda activate hello_simple
 ```
 
----
+## Simple hello world application
 
-### Architecture of extension
+The following is based on the [Getting Started on Heroku with Python](https://devcenter.heroku.com/articles/getting-started-with-python) documentation, but uses a more simple Python web application.
 
----
+A simple application can be implemented with the following files
 
-![](https://i.imgur.com/ij69tPh.png)
+- hello_simple.py
+- index.html
+- requirements.txt
+- runtime.txt
+- Procfile
 
----
+The first two files are the actual web server that only prints "Hello world".
 
-## Content script
+The content of `hello_simple.py` is
 
-- Bind with each page
-- Manipulate DOM
-- Add event listeners
-- Isolated JavaScript environment
-  - It doesn't break things
+```python
+import os
+import http.server
+import socketserver
 
----
+PORT = int(os.environ.get('PORT')) or 8080
 
-# :fork_and_knife: 
+Handler = http.server.SimpleHTTPRequestHandler
 
----
-
-<style>
-code.blue {
-  color: #337AB7 !important;
-}
-code.orange {
-  color: #F7A004 !important;
-}
-</style>
-
-- <code class="orange">onMessage('event')</code>: Register event listener
-- <code class="blue">sendMessage('event')</code>: Trigger event
-
----
-
-# :bulb: 
-
----
-
-- Dead simple API
-- Only cares about application logic
-
----
-
-```typescript
-import * as Channeru from 'channeru'
-
-// setup channel in different page environment, once
-const channel = Channeru.create()
+with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    print("serving at port", PORT)
+    httpd.serve_forever()
 ```
 
----
+The content of `index.html` is
 
-```typescript
-// in background script
-const fakeLogin = async () => true
-
-channel.answer('isLogin', async () => {
-  return await fakeLogin()
-})
+```html
+<html>
+  <head> </head>
+  <body>
+    Hello world!
+  </body>
+</html>
 ```
 
-<br>
+The `requirements.txt` file is standard for Python and you can make it with `pip freeze > requirements.txt`. In this case there are no external erquirements, so the file is empty.
 
-```typescript
-// in inject script
-const isLogin = await channel.callBackground('isLogin')
-console.log(isLogin) //-> true
+The `runtime.txt` file specifies to Heroku what the runtime should be, it contains
+
+```
+python-3.7.7
 ```
 
----
+The `Procfile` specifies how the process is to be started. In this case it also specifies that the process should be linked to the web (i.e. http), Heroku will automatically bind the TCP port of your application to the external https port (443). It contains
 
-# :100: :muscle: :tada:
+```
+web: python hello_simple.py
+```
 
----
+The files can also be found in the `hello_simple` directory of [this repository](https://github.com/Donders-Institute/meg-hackathon/tree/master/2020-06-28-webhook-heroku) on GitHub.
 
-### Wrap up
+I assume that you already have `git` and `heroku` installed.
 
-- Cross envornment commnication
-- A small library to solve messaging pain
-- TypeScript Rocks :tada: 
+    heroku login
 
----
+If you have problems later on with authentication, try `heroku logout` followed by `heroku login`.
 
-### Thank you! :sheep: 
+Let's first add the files of our application
 
-You can find me on
+```
+mkdir hello_simple
+cd hello_simple
 
-- GitHub
-- Twitter
-- or email me
+touch hello_simple.py
+touch index.html
+touch requirements.txt
+touch runtime.txt
+touch Procfile
+```
 
+Use an editor to add the content to each of the files, or copy them over from [this repository](https://github.com/Donders-Institute/meg-hackathon/tree/master/2020-06-28-webhook-heroku).
+
+You can run your applciation locally with
+
+```
+python hello_simple.py
+```
+
+and use your browser to connect to the page on your server on <http://localhost:5000>.
+
+Add the files to a local git repository
+
+```
+git init .
+git add *
+git commit -m "First application"
+```
+
+Now make a Heroku application
+
+```
+heroku create
+```
+
+If you go to the Heroku website, you will be able to see the application there. You don't have to change any of the settings on the Heroku website.
+
+Push your git repository to Heroku. This takes some time and some information will be printed on screen.
+
+```
+git push heroku master
+```
+
+The application is now deployed. Ensure that at least one instance of the app is running:
+
+```
+heroku ps:scale web=1
+```
+
+Now visit the app at the URL generated by its app name. As a handy shortcut, you can open the website as follows:
+
+```
+heroku open
+```
+
+This wiill open your new application in your browser. Congratulations, you have just started your own Python-based webserver in the clould. You can now copy the URL which looks like <https://warm-cove-64058.herokuapp.com> and send it to your friends!
+
+When you make changes to your code, you only have to do `git commit` and `git push heroku master` to deploy the new version on Heroku.
+
+## More complex web application that parses URL arguments and JSON data
+
+The example above did not really do any processing with the incoming requests, it only served a static page. Rather than extending the `SimpleHTTPRequestHandler` implementation, it is common to use a framework such as [Django](http://djangoproject.com/) or [Flask](https://palletsprojects.com/p/flask/) to implement web applications in Python.
+
+The following is again based on the [Getting Started on Heroku with Python](https://devcenter.heroku.com/articles/getting-started-with-python) documentation, but uses a Python web application implemented with Flask. Thre reason not to use Django here is that it requires a Postgresql database, which is an overkill for the simple webhook handler that we want to implement.
+
+This ampplication application requires the following files
+
+- hello_flask.py
+- requirements.txt
+- runtime.txt
+- Procfile
+
+The files can be found in the `hello_flask` directory of [this repository](https://github.com/Donders-Institute/meg-hackathon/tree/master/2020-06-28-webhook-heroku) on GitHub. Compared to the simple example, the `requirements.txt` now lists some requirements. Furthermore, the hello_flask.py web application can parse arguments from the URL and can deal with JSON data that is posted.
+
+I assume that you already have `git` and `heroku` installed.
+
+    heroku login
+
+If you have problems later on with authentication, try `heroku logout` followed by `heroku login`.
+
+Let's first add the files of our application
+
+```
+mkdir hello_flask
+cd hello_flask
+
+touch hello_flask.py
+touch requirements.txt
+touch runtime.txt
+touch Procfile
+```
+
+Use an editor to copy the content over from [this repository](https://github.com/Donders-Institute/meg-hackathon/tree/master/2020-06-28-webhook-heroku).
+
+You also have to install some external Python packages
+
+```
+pip install Flask
+pip install gunicorn
+pip freeze > requirements.txt
+```
+
+You can again run your application locally with
+
+```
+python hello_flask.py
+```
+
+and use your browser to connect to the page on your server on <http://localhost:5000>.
+
+If you look at the Python code that implements the application, you see that there is a handler for `/` and a handler for `/post`. You can test the first one by opening the URL <http://localhost:5000/?name=Robert> in your browser.
+
+Testing the `/post` handler can be done from the command line as follows
+
+```
+curl --header "Content-Type: application/json"  --request POST --data '{"a":"1","b":"2"}' http://localhost:5000/post
+```
+
+This should return `JSON data posted` in the terminal with curl, and in the command window with your application it should print the JSON structure. To test posting of more ceomplex data structures, you can use an application such as <https://www.postman.com>. Remember to set the `Content-Type: application/json` as a header, otherwise your application will not parse it as JSON.
+
+Add the files to a local git repository
+
+```
+git init .
+git add *
+git commit -m "Second application"
+```
+
+Now make a Heroku application
+
+```
+heroku create
+```
+
+Push your git repository to Heroku. This takes some time and some information will be printed on screen.
+
+```
+git push heroku master
+```
+
+The application is now deployed. Ensure that at least one instance of the app is running:
+
+```
+heroku ps:scale web=1
+```
+
+Now visit the app at the URL generated by its app name. As a handy shortcut, you can open the website as follows:
+
+```
+heroku open
+```
+
+This will open your new application in your browser.
+
+Use the following to see the logs
+
+```
+heroku logs --tail
+```
+
+and again post some data in another terminal
+
+```
+curl --header "Content-Type: application/json"  --request POST --data '{"fielda":"1","fieldb":"2"}' https://rocky-sea-10340.herokuapp.com/post
+```
+
+Your application is now processing and printing the JSON data. If you now configure <https://rocky-sea-10340.herokuapp.com/post> as a webhook elsewhere, e.g. when a Google form is submitted, using the webhook service in IFTTT, or under "Settings -> Webhooks" on GitHub, your application will receive the incoming data as a JSON structure and can process it in your Python code.
+
+When you make changes to your code, you only have to do `git commit` and `git push heroku master` to deploy the new version on Heroku.
+
+## Final remarks
+
+### Looking around inside the virtual machine
+
+You can start a one-off virtual machine and automatically get logged in with
+
+```
+heroku run bash
+```
+
+This allows you to look around, explore teh environment in which your app is running, and - if needed - to debug your app in its actual execution environment.
+
+### Storing secret data
+
+If you have secret API keys or so that you do not want to store in your code, you can use the following to store them in your Heroku application
+
+```
+heroku config:set API_KEY=xxxx-xxxx-xxxx
+heroku config:set API_PWD=yyyy-yyyy-yyyy
+```
+
+In your application code you can use `os.environ.get()` to get the value. You can also find these config vars in the online Heroku dashboard.
+
+### Alternatives
+
+Some alternatives to running small pieces of code in the cloud are [Amazon Lambda](https://aws.amazon.com/lambda/), [Azure Functions](https://azure.microsoft.com/en-us/services/functions/), or [Google App Scripts](https://www.google.com/script/start/).
+
+The difference with these is that they execute only a single function, whereas a Heroy dyno is a full-fledged virtual machine. The easy integration of `git` with Heroku and the way that the dyno's start/stop automatically make Heroku as easy - if not easier - than these [Function as a service (FaaS)](https://en.wikipedia.org/wiki/Function_as_a_service) platforms.
